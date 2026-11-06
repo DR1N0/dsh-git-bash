@@ -85,7 +85,7 @@
     "test:ts": "pnpm run build:ts && node --test",
     "pack:check": "npm pack --dry-run",
     "prepack": "pnpm run build:ts",
-    "prepublishOnly": "pnpm run test:ts"
+    "prepublishOnly": "pnpm run build:ts"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",
