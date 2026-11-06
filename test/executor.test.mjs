@@ -11,6 +11,12 @@ import { Config, describeGuardFailure, GitBashExecutor, resolveGitBashPath, toWi
 const LOCAL_BASH_CONFIG = LocalBashExecutor.Config;
 const CAN_RUN_NATIVE_GUARD = process.platform === "win32" && process.arch === "x64";
 const IS_WIN32 = process.platform === "win32";
+// A Git Bash (MSYS) parent rewrites its own token's default DACL, so the
+// restricted tokens these cases build differ from the ones a DSH server
+// (Electron) produces. Run the ACL matrix from PowerShell, cmd or CI to match
+// the real host; under an MSYS parent the two fork/pipe-sensitive cases are
+// skipped instead of failing on an artifact of the parent shell.
+const MSYS_PARENT = process.env.MSYSTEM !== undefined;
 
 function pluginConfig(overrides = {}) {
   return Config({
@@ -177,7 +183,7 @@ test("runs background commands directly through Git Bash", async () => {
   }
 });
 
-test("runs Git Bash and nested MSYS children under read-only", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
+test("runs Git Bash and nested MSYS children under read-only", { skip: !CAN_RUN_NATIVE_GUARD || MSYS_PARENT }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
     const result = await foreground(executor, {
@@ -219,7 +225,7 @@ test("read-only denies workspace writes", { skip: !CAN_RUN_NATIVE_GUARD }, async
   }
 });
 
-test("workspace-write allows workspace writes and denies sibling writes", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
+test("workspace-write allows workspace writes and denies sibling writes", { skip: !CAN_RUN_NATIVE_GUARD || MSYS_PARENT }, async () => {
   const inside = ".dsh-git-bash-workspace-probe.txt";
   const outside = "../.dsh-git-bash-outside-probe.txt";
   rmSync(inside, { force: true });

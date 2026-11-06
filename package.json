@@ -1,6 +1,6 @@
 {
   "name": "@dr1n0/dsh-git-bash",
-  "version": "0.2.2-r1",
+  "version": "0.2.2-r2",
   "description": "Use Git for Windows Bash as the default DSH shell with restricted-mode support (community continuation of inmny/dsh-git-bash)",
   "keywords": [
     "deepseek-harness",

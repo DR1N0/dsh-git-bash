@@ -9,20 +9,16 @@ export const inject = ["agents", "tools", "systemPrompt"];
 // Make the global Git Bash-backed Bash tool win over preset-provided shells.
 export function apply(ctx: Context): void {
   const installed = new Map<Agent, () => unknown>();
+  // Agents whose install waits for `tool-bash` to register the global `bash` tool.
+  const waiting = new Map<Agent, () => void>();
 
-  const install = (agent: Agent): void => {
-    if (installed.has(agent)) return;
+  const installInto = (agent: Agent): void => {
+    const globalBash = ctx.tools.get("bash");
+    if (globalBash === undefined) return;
 
     let cleanup!: () => unknown;
     cleanup = agent.ctx.effect(() => {
       const disposers: Array<() => unknown> = [];
-      const globalBash = ctx.tools.get("bash");
-      if (!globalBash) {
-        throw new Error(
-          "git-bash-agent-shell: the global bash tool is unavailable; keep the tool-bash row enabled",
-        );
-      }
-
       disposers.push(agent.ctx.tools.register(globalBash));
 
       if (ctx.tools.get("pwsh", agent)) {
@@ -49,17 +45,48 @@ export function apply(ctx: Context): void {
     installed.set(agent, cleanup);
   };
 
+  // `tool-bash` registers its global `bash` tool only after its `jobs`
+  // dependency resolves, which can land after this agent is created. Wait for
+  // the tool instead of failing the whole plugin row.
+  const install = (agent: Agent): void => {
+    if (installed.has(agent) || waiting.has(agent)) return;
+
+    if (ctx.tools.get("bash") !== undefined) {
+      installInto(agent);
+      return;
+    }
+
+    const stop = ctx.on("tools/change", () => {
+      if (ctx.tools.get("bash") === undefined) return;
+      stop();
+      waiting.delete(agent);
+      if (!installed.has(agent)) installInto(agent);
+    });
+    waiting.set(agent, stop);
+  };
+
+  const uninstall = (agent: Agent): void => {
+    installed.delete(agent);
+    const stop = waiting.get(agent);
+    if (stop !== undefined) {
+      stop();
+      waiting.delete(agent);
+    }
+  };
+
   ctx.effect(() => {
     const stopCreated = ctx.on("agent/created", ({ agent }) => {
       install(agent);
       return undefined;
     });
-    const stopDisposed = ctx.on("agent/disposed", ({ agent }) => installed.delete(agent));
+    const stopDisposed = ctx.on("agent/disposed", ({ agent }) => uninstall(agent));
     for (const agent of ctx.agents.list()) install(agent);
 
     return async () => {
       stopCreated();
       stopDisposed();
+      for (const stop of waiting.values()) stop();
+      waiting.clear();
       const cleanups = [...installed.values()];
       installed.clear();
       await Promise.allSettled(cleanups.map((cleanup) => Promise.resolve(cleanup())));
