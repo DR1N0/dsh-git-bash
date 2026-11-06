@@ -564,9 +564,11 @@ test("package declares the browser bundle for DSH discovery", () => {
   });
 });
 
-// DSH rejects a plugin whose declared DSH peer ranges do not admit the running
-// host, so keep this checkout's ranges in step with the host it builds against.
-test("declared DSH peer ranges admit the installed host", () => {
+// `engines.dsh` decides alone among the DSH requirements: the host's
+// compatibility check ignores peerDependencies once that field exists. Keeping
+// only a lower bound means a new plugin adopts every later DSH release, while
+// an older host keeps installing the older plugin version from npm.
+test("declared DSH compatibility admits the installed host", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const host = JSON.parse(
     readFileSync(
@@ -574,14 +576,13 @@ test("declared DSH peer ranges admit the installed host", () => {
       "utf8",
     ),
   );
-  const peers = Object.entries(pkg.peerDependencies).filter(
-    ([name]) => name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-"),
+  assert.equal(typeof pkg.engines.dsh, "string");
+  assert.ok(
+    semver.satisfies(host.version, pkg.engines.dsh, { includePrerelease: true }),
+    `engines.dsh "${pkg.engines.dsh}" rejects the installed DSH ${host.version}`,
   );
-  assert.ok(peers.length > 0);
-  for (const [name, range] of peers) {
-    assert.ok(
-      semver.satisfies(host.version, range, { includePrerelease: true }),
-      `${name} "${range}" rejects the installed DSH ${host.version}`,
-    );
-  }
+  const dshPeers = Object.keys(pkg.peerDependencies).filter(
+    (name) => name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-"),
+  );
+  assert.deepEqual(dshPeers, [], "a dsh peer range would re-introduce a hard compatibility gate");
 });

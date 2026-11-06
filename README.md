@@ -25,10 +25,10 @@
 
 版本号形如 `0.2.2-r1`：
 
-- `0.2.2`：适配的 DSH 版本线（peer 范围 `>=0.2.2-rc.1 <0.2.3-0`）；
+- `0.2.2`：适配的 DSH 版本线（`engines.dsh: ">=0.2.2-rc.1"`）；
 - `-r1`：本插件的第 N 个修订。同一条 DSH 线上的插件补丁递增 `-r2`、`-r3`，不会与 DSH 未来的版本号撞车。
 
-安装时以 `package.json` 的 `peerDependencies` 与 `engines` 为准；版本号只是让人一眼看出适配线，不参与兼容判定。
+兼容性只由 `package.json` 的 `engines.dsh` 下限决定：新版本插件自动接受之后的所有 DSH 版本，不再在每次 DSH 升级时改包；需要旧 DSH 的用户直接安装对应的旧插件版本。
 
 ## 使用方法
 
@@ -40,7 +40,7 @@
 printf 'shell=%s\nversion=%s\nmsystem=%s\n' "$BASH" "$BASH_VERSION" "$MSYSTEM"
 ```
 
-`MSYSTEM` 应为 `MINGW64` 或 `MINGW32`。
+`MSYSTEM` 应为 `MINGW64`、`MINGW32` 或 `UCRT64`（Git for Windows 2.56 起默认 UCRT64）。
 
 Web 界面中的 Bash 工具行可以展开查看 command、cwd、stdout/stderr 和 exit status。`run_code` 内的 nested Bash 调用使用同一套 terminal 详情；过长的 command 会自动换行，output 则保留终端横向滚动，以维持日志和表格的列对齐。
 
@@ -130,20 +130,18 @@ npm 包包含预编译的 `msys-token-guard.exe` 和 `msys-token-guard-hook.dll`
 
 Microsoft Detours 4.0.1 源码按 MIT 许可存放在 `native/vendor/detours`，许可文本随 npm 包分发。Detours 的 DLL path 参数使用 Windows ANSI API，因此插件安装路径必须能由当前系统代码页无损表示，并且不能超过 `MAX_PATH`；不满足条件时 guard 会 fail closed。
 
-## 已知问题
+## 验证与兼容性
 
-### 受限模式在 Git for Windows 2.52 / bash 5.2 上启动失败
+本版本的验证环境：Windows 11、Git for Windows 2.56.0（UCRT64 运行时、bash 5.3.15）、DSH 0.2.2-rc.1。`pnpm test` 的 36 个用例全部通过，包括 `read-only` / `workspace-write` 的真实 ACL 权限矩阵和 native guard 的 fail-closed 用例。
 
-在本次验证环境（Windows 11、Git for Windows 2.52.0、bash 5.2.37、DSH 0.2.2-rc.1 依赖线）下，`read-only` / `workspace-write` 的受限执行会让 bash 在初始化阶段直接退出：
+Git for Windows 2.52（MINGW64、bash 5.2）上受限模式会失败：
 
 ```text
 cygheap_user::init: NtSetInformationToken (TokenDefaultDacl), 0xC0000022
 fatal error - couldn't create signal pipe, Win32 error 5
 ```
 
-即 MSYS 运行时试图重写自己的 token default DACL 时被 ACL 沙箱拒绝，而 native guard 的 hook 在该 Git 版本上未能拦截这次重写。`danger-full-access` 不受影响。
-
-同一环境下用 ahtsiu 的原始分支跑同一套测试，失败用例更多（10 个），因此这不是本项目改动引入的回归，而是 native guard 与较新 MSYS 版本的兼容性问题。补救方向是针对该 Git 版本更新 `native/msys-token-guard-hook.cpp` 的 hook 条件并以 MSVC 重建 artifact；在修复前请把会话权限设为 `danger-full-access` 使用 Git Bash。
+MSYS 在初始化阶段重写自己的 token default DACL 被 ACL 沙箱拒绝，native guard 的 hook 在该 Git 版本上未能拦截。升级到 2.56 后该问题消失（同一套测试全绿）；在 2.52 上 `danger-full-access` 不受影响。
 
 ## 开发
 

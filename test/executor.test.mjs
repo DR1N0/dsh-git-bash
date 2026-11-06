@@ -151,7 +151,9 @@ test("runs foreground commands directly in danger-full-access", async () => {
       mode: "danger-full-access",
       denied: false,
     });
-    assert.match(result.stdout.text, /^\d+\.\d+.*\|MINGW(?:32|64)\|.*\/bash$/);
+    // Git for Windows 2.56 moved its runtime from MINGW64 to UCRT64; accept
+    // both so the test tracks the installed Git rather than one old label.
+    assert.match(result.stdout.text, /^\d+\.\d+.*\|(?:MINGW(?:32|64)|UCRT64)\|.*\/bash$/);
   } finally {
     await dispose(ctx);
   }
@@ -169,7 +171,7 @@ test("runs background commands directly through Git Bash", async () => {
     assert.equal(process.status, "completed");
     assert.equal(process.exitCode, 0);
     assert.equal(process.signal, null);
-    assert.match(output.delta, /^MINGW(?:32|64)$/);
+    assert.match(output.delta, /^(?:MINGW(?:32|64)|UCRT64)$/);
   } finally {
     await dispose(ctx);
   }

@@ -45,5 +45,6 @@ test("runs commands with the resolved Git Bash", () => {
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /^\d+\.\d+.*\|MINGW(?:32|64)$/);
+  // Git for Windows 2.56 moved its runtime from MINGW64 to UCRT64.
+  assert.match(result.stdout, /^\d+\.\d+.*\|(?:MINGW(?:32|64)|UCRT64)$/);
 });

@@ -58,7 +58,8 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24",
+    "dsh": ">=0.2.2-rc.1"
   },
   "dsh": {
     "bundle": {
@@ -88,14 +89,7 @@
     "prepublishOnly": "pnpm run build:ts"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.1.0",
-    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-bash-local": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-sandbox": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-shell": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1 <0.2.3-0",
-    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.1 <0.2.3-0"
+    "@deepseek-ai/cordis": ">=4.1.0"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.18.5"
