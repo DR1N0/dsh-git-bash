@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "dsh-plugin-git-bash",
+  id: "@dr1n0/dsh-git-bash",
   factory: (require) => {
     const module = { exports: {} };
     const {
@@ -16,12 +16,12 @@ window.__ModuleLoader__.load({
     const SLOT = "tool.call.toolview";
     const SETTINGS_SLOT = "plugins.row.config";
     const SETTINGS_NAMESPACE = "git-bash-shell";
-    const SETTINGS_ROW_KEY = "dsh-plugin-git-bash#git-bash-shell";
+    const SETTINGS_ROW_KEY = "@dr1n0/dsh-git-bash#git-bash-shell";
     const LOCALE_NAMESPACE = "git-bash.settings";
     const PRIORITY = -100;
     const WRAP_ATTR = "data-dsh-git-bash-wrap";
-    const STYLE_ID = "dsh-plugin-git-bash-command-wrap";
-    const SETTINGS_STYLE_ID = "dsh-plugin-git-bash-settings";
+    const STYLE_ID = "dr1n0-dsh-git-bash-command-wrap";
+    const SETTINGS_STYLE_ID = "dr1n0-dsh-git-bash-settings";
     const STYLE_OWNER = {};
     const COMMAND_WRAP_CSS = `
 [${WRAP_ATTR}] [class*="_command_"] {

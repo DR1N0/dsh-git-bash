@@ -3,3 +3,4 @@ lib/
 *.tgz
 coverage/
 native/build/
+.acl-recovery/

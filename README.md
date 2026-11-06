@@ -1,8 +1,24 @@
-# dsh-plugin-git-bash
+# @dr1n0/dsh-git-bash
+
+> **社区延续版（衍生项目）。** 本仓库衍生自 [inmny/dsh-git-bash](https://github.com/inmny/dsh-git-bash)，
+> 接续 [ahtsiu](https://github.com/ahtsiu/dsh-git-bash) 的 `bugfix/adapt-to-0.2.1-rc.5` 分支继续维护 0.2.x 适配。
+> 原作者保留全部著作权，本项目按原 MIT 许可分发；包名与原版 `dsh-plugin-git-bash` 区分，
+> 因此两者可以独立安装、互不覆盖。原始设计、native guard 与测试矩阵均来自上游。
 
 让 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 在 Windows 上默认使用 Git for Windows Bash，并保留 DSH 的 `read-only`、`workspace-write` 和 `danger-full-access` 权限语义。
 
 ![Git Bash 在 DeepSeek Harness 中运行](assets/teaser.png)
+
+## 与原项目的差异
+
+相对上游 `dsh-plugin-git-bash`（最后发布 0.3.3）与本延续版的第一批改动：
+
+- **包名**：改为 `@dr1n0/dsh-git-bash`，避免与 npm 上的原版同名冲突。
+- **DSH 0.2.x 适配**：跟随 `execute` seam、Config schema 投影和新的 client 模块注入（来自 ahtsiu 的分支）。
+- **UTF-8 输出**：为 Git Bash 固定 `LANG`/`LC_ALL`/`PYTHONUTF8`/`PYTHONIOENCODING`，避免中文（CJK）输出在 GBK 代码页机器上变成乱码或触发 `UnicodeEncodeError`。
+- **MSYS 路径转换**：模型或宿主传入的 `/d/work`、`/cygdrive/d/work` 会转成 `D:\work` 再交给 Node 作为工作目录；`/usr/bin` 这类非盘符路径保持原样。
+- **host-level 调用分流**：不带 `sandboxPolicy` 的 `ctx.shell` 调用（宿主插件内部调用）不再继承部署沙箱门禁，默认用 Windows PowerShell 执行；可通过 `hostShell: bash` 改回 Git Bash。
+- **发布脚本**：`prepack` 只做 TypeScript 编译，不强制重建 native（预编译产物随包分发）。
 
 ## 使用方法
 
@@ -25,21 +41,15 @@ Web 界面中的 Bash 工具行可以展开查看 command、cwd、stdout/stderr 
 从 npm 安装固定版本到 Web profile：
 
 ```sh
-dsh plugin --profile web add dsh-plugin-git-bash@0.6.1
+dsh plugin --profile web add @dr1n0/dsh-git-bash@0.7.0
 ```
 
 更新现有安装时使用同一条命令。安装完成后重启 `dsh web`，让 Host 和浏览器 client 同时加载新版本，然后新建会话。
 
-安装最新版时可以省略版本号：
-
-```sh
-dsh plugin --profile web add dsh-plugin-git-bash
-```
-
 开发本地版本时传入 checkout 路径：
 
 ```powershell
-dsh plugin --profile web add C:\path\to\dsh-git-bash
+dsh plugin --profile web add E:\Coding\dsh-git-bash-fork
 ```
 
 ## 权限模式
@@ -74,10 +84,28 @@ dsh web
 
 ```yaml
 - id: git-bash-shell
-  name: dsh-plugin-git-bash
+  name: '@dr1n0/dsh-git-bash'
   config:
     executable: D:\Apps\Git\bin\bash.exe
 ```
+
+## 配置 host-level shell
+
+一些宿主插件会直接调用 `ctx.shell` 而不带 sandbox policy。这类调用默认走 Windows PowerShell，因为它们通常是按平台默认 shell 写的：
+
+```yaml
+- id: git-bash-shell
+  name: '@dr1n0/dsh-git-bash'
+  config:
+    hostShell: pwsh   # 默认；设为 bash 则所有 host 调用也走 Git Bash
+```
+
+| 值 | 行为 |
+| --- | --- |
+| `pwsh`（默认） | `ctx.shell` 的 host 调用用 `pwsh.exe`（找不到 PowerShell 7 时回退到 Windows PowerShell 5.1），不经过沙箱 |
+| `bash` | host 调用也用 Git Bash 执行，不经过沙箱 |
+
+带 `sandboxPolicy` 的工具调用不受此项影响，始终按所选权限模式走 Git Bash + sandbox。
 
 ## 平台支持
 
@@ -92,13 +120,29 @@ npm 包包含预编译的 `msys-token-guard.exe` 和 `msys-token-guard-hook.dll`
 
 Microsoft Detours 4.0.1 源码按 MIT 许可存放在 `native/vendor/detours`，许可文本随 npm 包分发。Detours 的 DLL path 参数使用 Windows ANSI API，因此插件安装路径必须能由当前系统代码页无损表示，并且不能超过 `MAX_PATH`；不满足条件时 guard 会 fail closed。
 
+## 已知问题
+
+### 受限模式在 Git for Windows 2.52 / bash 5.2 上启动失败
+
+在本次验证环境（Windows 11、Git for Windows 2.52.0、bash 5.2.37、DSH 0.2.1-rc.5 依赖线）下，`read-only` / `workspace-write` 的受限执行会让 bash 在初始化阶段直接退出：
+
+```text
+cygheap_user::init: NtSetInformationToken (TokenDefaultDacl), 0xC0000022
+fatal error - couldn't create signal pipe, Win32 error 5
+```
+
+即 MSYS 运行时试图重写自己的 token default DACL 时被 ACL 沙箱拒绝，而 native guard 的 hook 在该 Git 版本上未能拦截这次重写。`danger-full-access` 不受影响。
+
+同一环境下用 ahtsiu 的原始分支跑同一套测试，失败用例更多（10 个），因此这不是 0.7.0 改动引入的回归，而是 native guard 与较新 MSYS 版本的兼容性问题。补救方向是针对该 Git 版本更新 `native/msys-token-guard-hook.cpp` 的 hook 条件并以 MSVC 重建 artifact；在修复前请把会话权限设为 `danger-full-access` 使用 Git Bash。
+
 ## 开发
 
 安装依赖并运行完整验证：
 
 ```sh
 pnpm install
-pnpm test
+pnpm test        # 完整构建（含 native）+ 全部测试
+pnpm build:ts    # 只编译 TypeScript（发布用，不要求 MSVC）
 pnpm run pack:check
 ```
 
@@ -108,4 +152,4 @@ pnpm run pack:check
 
 ## License
 
-MIT
+MIT。原始版权归 [inmny/dsh-git-bash](https://github.com/inmny/dsh-git-bash) 的作者；0.2.x 适配来自 [ahtsiu](https://github.com/ahtsiu/dsh-git-bash)。

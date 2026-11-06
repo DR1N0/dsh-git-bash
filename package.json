@@ -1,22 +1,24 @@
 {
-  "name": "dsh-plugin-git-bash",
-  "version": "0.6.1",
-  "description": "Use Git for Windows Bash as the default DSH shell with restricted-mode support",
+  "name": "@dr1n0/dsh-git-bash",
+  "version": "0.7.0",
+  "description": "Use Git for Windows Bash as the default DSH shell with restricted-mode support (community continuation of inmny/dsh-git-bash)",
   "keywords": [
     "deepseek-harness",
     "dsh",
     "plugin",
     "git-bash",
+    "gitbash",
     "sandbox",
-    "windows"
+    "windows",
+    "msys2"
   ],
-  "homepage": "https://github.com/inmny/dsh-git-bash#readme",
+  "homepage": "https://github.com/DR1N0/dsh-git-bash#readme",
   "bugs": {
-    "url": "https://github.com/inmny/dsh-git-bash/issues"
+    "url": "https://github.com/DR1N0/dsh-git-bash/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/inmny/dsh-git-bash.git"
+    "url": "git+https://github.com/DR1N0/dsh-git-bash.git"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -76,12 +78,14 @@
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\"",
     "build:native": "node scripts/build-native.mjs",
-    "build": "pnpm run build:native && pnpm run clean && tsc -p tsconfig.json",
+    "build:ts": "pnpm run clean && tsc -p tsconfig.json",
+    "build": "pnpm run build:native && pnpm run build:ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && node --test",
+    "test:ts": "pnpm run build:ts && node --test",
     "pack:check": "npm pack --dry-run",
-    "prepack": "pnpm run build",
-    "prepublishOnly": "pnpm test"
+    "prepack": "pnpm run build:ts",
+    "prepublishOnly": "pnpm run test:ts"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
@@ -114,5 +118,5 @@
     "semver": "^7.8.5",
     "typescript": "5.9.3"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@11.28.5"
 }

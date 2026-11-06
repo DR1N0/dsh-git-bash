@@ -6,10 +6,11 @@ import { Context } from "@deepseek-ai/cordis";
 import { LocalBashExecutor } from "@deepseek-ai/dsh-bash-local";
 import { LocalSandboxProvider } from "@deepseek-ai/dsh-sandbox-local";
 import { LocalSubprocessRuntime } from "@deepseek-ai/dsh-subprocess-local";
-import { Config, describeGuardFailure, GitBashExecutor, resolveGitBashPath } from "../lib/index.js";
+import { Config, describeGuardFailure, GitBashExecutor, resolveGitBashPath, toWindowsPath } from "../lib/index.js";
 
 const LOCAL_BASH_CONFIG = LocalBashExecutor.Config;
 const CAN_RUN_NATIVE_GUARD = process.platform === "win32" && process.arch === "x64";
+const IS_WIN32 = process.platform === "win32";
 
 function pluginConfig(overrides = {}) {
   return Config({
@@ -41,8 +42,17 @@ function createExecutor(mode = "danger-full-access", overrides = {}) {
   return { ctx, executor };
 }
 
+// The tool layer always passes the call's standing sandbox policy; host-level
+// `ctx.shell` callers omit it. Tests drive the tool path unless they opt out.
+function toolSpec(executor, request) {
+  return executor.resolve({
+    ...request,
+    sandboxPolicy: { mode: executor.sandboxMode, workspaceRoot: process.cwd() },
+  });
+}
+
 async function foreground(executor, request) {
-  const execution = await executor.execute(executor.resolve(request));
+  const execution = await executor.execute(toolSpec(executor, request));
   return execution.result();
 }
 
@@ -150,7 +160,7 @@ test("runs foreground commands directly in danger-full-access", async () => {
 test("runs background commands directly through Git Bash", async () => {
   const { ctx, executor } = createExecutor();
   try {
-    const process = await executor.execute(executor.resolve({
+    const process = await executor.execute(toolSpec(executor, {
       command: "printf '%s' \"$MSYSTEM\"",
     }));
     await process.done;
@@ -247,7 +257,7 @@ test("workspace-write allows workspace writes and denies sibling writes", { skip
 test("reports sandbox facts for restricted background processes", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const process = await executor.execute(executor.resolve({
+    const process = await executor.execute(toolSpec(executor, {
       command: "printf guarded-background",
     }));
     await process.done;
@@ -338,7 +348,7 @@ test("aborts the complete restricted foreground process tree", { skip: !CAN_RUN_
 test("kills the complete restricted background process tree", { skip: !CAN_RUN_NATIVE_GUARD }, async () => {
   const { ctx, executor } = createExecutor("read-only");
   try {
-    const process = await executor.execute(executor.resolve({ command: "sleep 10" }));
+    const process = await executor.execute(toolSpec(executor, { command: "sleep 10" }));
     assert.equal(process.status, "running");
     assert.equal(process.kill(), true);
     await process.done;
@@ -349,6 +359,46 @@ test("kills the complete restricted background process tree", { skip: !CAN_RUN_N
       denied: false,
       enforcement: "partial",
     });
+  } finally {
+    await dispose(ctx);
+  }
+});
+
+test("translates MSYS drive paths for Node's working directory", { skip: !IS_WIN32 }, () => {
+  assert.equal(toWindowsPath("/d/work"), "D:\\work");
+  assert.equal(toWindowsPath("/d"), "D:\\");
+  assert.equal(toWindowsPath("/cygdrive/e/PortableGit"), "E:\\PortableGit");
+  assert.equal(toWindowsPath("/usr/bin"), "/usr/bin");
+  assert.equal(toWindowsPath("D:\\work"), "D:\\work");
+  assert.equal(toWindowsPath("relative/dir"), "relative/dir");
+});
+
+test("resolves MSYS workdirs and pins a UTF-8 locale", { skip: !IS_WIN32 }, async () => {
+  const { ctx, executor } = createExecutor();
+  try {
+    const spec = toolSpec(executor, { command: "true", workdir: "/d/work" });
+    assert.equal(spec.workdir, "D:\\work");
+    assert.equal(spec.env.PYTHONUTF8, "1");
+    assert.equal(spec.env.PYTHONIOENCODING, "utf-8");
+    assert.equal(spec.env.LANG, "C.UTF-8");
+    assert.equal(spec.env.LC_ALL, "C.UTF-8");
+    assert.equal(spec.env.CHERE_INVOKING, "1");
+  } finally {
+    await dispose(ctx);
+  }
+});
+
+test("host-level calls bypass confinement and honor hostShell", async () => {
+  const { ctx, executor } = createExecutor("workspace-write", { hostShell: "bash" });
+  try {
+    // No sandboxPolicy: this is the host-level path, which must run even
+    // under a confining deployment mode.
+    const execution = await executor.execute(executor.resolve({ command: "printf host-level" }));
+    const result = await execution.result();
+
+    assert.equal(result.exitCode, 0, result.stderr.text);
+    assert.equal(result.stdout.text, "host-level");
+    assert.equal(result.sandbox, undefined);
   } finally {
     await dispose(ctx);
   }

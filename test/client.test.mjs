@@ -254,7 +254,7 @@ function findElement(node, predicate) {
 
 test("client bundle registers a higher-priority Bash row wrapper", () => {
   const { descriptor, plugin } = loadClient();
-  assert.equal(descriptor.id, "dsh-plugin-git-bash");
+  assert.equal(descriptor.id, "@dr1n0/dsh-git-bash");
   assert.deepEqual(json(plugin.inject), [
     "slots",
     "locale",
@@ -308,7 +308,7 @@ test("client bundle registers and operates the Git Bash settings card", async ()
   const { settingsRegistration } = harness;
   assert.deepEqual(json(settingsRegistration.options), {
     name: "plugins.row.config",
-    key: "dsh-plugin-git-bash#git-bash-shell",
+    key: "@dr1n0/dsh-git-bash#git-bash-shell",
     locale: "git-bash.settings",
   });
 
@@ -530,14 +530,14 @@ test("client bundle scopes command wrapping and settings styles", () => {
   const { plugin } = loadClient(document);
   const harness = registerCompatRow(plugin);
 
-  const commandStyle = styles.get("dsh-plugin-git-bash-command-wrap");
+  const commandStyle = styles.get("dr1n0-dsh-git-bash-command-wrap");
   assert.ok(commandStyle);
   assert.match(commandStyle.textContent, /\[data-dsh-git-bash-wrap\]/);
   assert.match(commandStyle.textContent, /white-space: pre-wrap !important/);
   assert.match(commandStyle.textContent, /overflow-wrap: anywhere !important/);
   assert.match(commandStyle.textContent, /text-overflow: clip !important/);
 
-  const settingsStyle = styles.get("dsh-plugin-git-bash-settings");
+  const settingsStyle = styles.get("dr1n0-dsh-git-bash-settings");
   assert.ok(settingsStyle);
   assert.match(settingsStyle.textContent, /\[data-dsh-git-bash-settings\]/);
   assert.match(settingsStyle.textContent, /dgb-settings-input-row/);
@@ -549,7 +549,7 @@ test("client bundle scopes command wrapping and settings styles", () => {
 
 test("package declares the browser bundle for DSH discovery", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(pkg.version, "0.6.1");
+  assert.equal(pkg.version, "0.7.0");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.ok(pkg.files.includes("client.js"));
   assert.deepEqual(pkg.dsh.client, {

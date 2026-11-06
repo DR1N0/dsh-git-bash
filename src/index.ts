@@ -15,7 +15,6 @@ import type {
   ConfinedSandboxMode,
   RunnerFailureRule,
   SandboxEnforcement,
-  SandboxExecutionPolicy,
   SandboxMode,
   SandboxPolicy,
 } from "@deepseek-ai/dsh-sandbox";
@@ -29,7 +28,7 @@ import type {
 } from "@deepseek-ai/dsh-shell";
 import z from "@deepseek-ai/schemastery";
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveGitBashPath } from "./discovery.js";
@@ -61,6 +60,42 @@ const GUARD_FAILURE_RULE: RunnerFailureRule = {
 // the server token's default DACL) offers no usable ordinary SID to the guard.
 const SERVER_DACL_FAILURE_SIGNATURE = "openprocesstoken(child default dacl)";
 
+// MSYS2/Git Bash on a zh-CN Windows defaults to the GBK code page, so CJK
+// output can reach the model as mojibake or as a Python UnicodeEncodeError.
+// The host already pins NO_COLOR/TERM/PAGER; this adds the locale half.
+const UTF8_ENV: Readonly<Record<string, string>> = {
+  PYTHONUTF8: "1",
+  PYTHONIOENCODING: "utf-8",
+  LANG: "C.UTF-8",
+  LC_ALL: "C.UTF-8",
+};
+
+// Models and host code routinely hand over MSYS drive paths (`/d/work`,
+// `/cygdrive/d/work`). Node's cwd must be a Windows path, so translate only
+// the drive-rooted shape and leave POSIX paths such as `/usr/bin` untouched.
+const MSYS_DRIVE_PATH = /^\/(?:cygdrive\/)?([A-Za-z])(?:\/(.*))?$/;
+
+export function toWindowsPath(value: string): string {
+  if (process.platform !== "win32") return value;
+  const match = MSYS_DRIVE_PATH.exec(value);
+  if (match === null) return value;
+  const letter = match[1];
+  if (letter === undefined) return value;
+  const rest = (match[2] ?? "").replace(/\//g, "\\");
+  const drive = letter.toUpperCase() + ":";
+  return rest === "" ? drive + "\\" : drive + "\\" + rest;
+}
+
+// Host-level callers on Windows expect the native PowerShell interpreter;
+// tool calls always carry a sandbox policy and stay on Git Bash.
+function resolvePowerShell(): string {
+  const programFiles = process.env.ProgramFiles;
+  const pwsh = programFiles === undefined ? undefined : programFiles + "\\PowerShell\\7\\pwsh.exe";
+  if (pwsh !== undefined && existsSync(pwsh)) return pwsh;
+  const systemRoot = process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows";
+  return systemRoot + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+}
+
 // DSH derives every restricted token from the server's own process token, and
 // the restricted DACL starts as a copy of the server's default DACL. Servers
 // started outside MSYS2 can carry a DACL without the user SID, which blocks
@@ -81,9 +116,13 @@ function normalizeServerDefaultDacl(): boolean {
   return result.status === 0;
 }
 
+/** Shell used for host-level `ctx.shell` calls that carry no sandbox policy. */
+export type HostShell = "bash" | "pwsh";
+
 export interface Config extends LocalBashConfig {
   // Absolute Git for Windows bash.exe path. Auto-detected when blank.
   executable: Volatile<string>;
+  hostShell: HostShell;
 }
 
 // 0.1.7 rejects volatile fields nested inside intersect/union. Copy the bash
@@ -102,6 +141,12 @@ export const Config = z.object({
     .role("path")
     .description("Absolute path to Git for Windows bash.exe; blank uses automatic discovery.")
     .volatile(),
+  hostShell: z.union([z.const("bash"), z.const("pwsh")])
+    .default("pwsh")
+    .description(
+      "Shell for host-level ctx.shell callers that pass no sandbox policy: 'pwsh' keeps the "
+        + "Windows interpreter they were written for, 'bash' keeps everything on Git Bash.",
+    ),
 }) as z<Config>;
 
 function resolveConfiguredExecutable(executable: string): string | undefined {
@@ -202,13 +247,20 @@ export class GitBashExecutor extends LocalBashExecutor {
     const resolved = super.resolve(request);
     return {
       ...resolved,
+      // Models and host code hand over MSYS paths (`/d/work`); Node's cwd
+      // needs the Windows drive form.
+      workdir: toWindowsPath(resolved.workdir),
       env: {
+        ...UTF8_ENV,
         ...(resolved.env ?? {}),
         // Keep Git/MSYS2 Bash in the workspace directory instead of
         // changing to $HOME on login-shell startup.
         CHERE_INVOKING: "1",
       },
-      sandboxPolicy: request.sandboxPolicy ?? this.ctx.sandboxPolicy.resolve(),
+      // Tool calls always pass a per-call policy. Host-level `ctx.shell`
+      // callers pass none, and those must not inherit the deployment sandbox
+      // gate: they are trusted host code that expects the native shell.
+      ...(request.sandboxPolicy === undefined ? {} : { sandboxPolicy: request.sandboxPolicy }),
     };
   }
 
@@ -221,11 +273,26 @@ export class GitBashExecutor extends LocalBashExecutor {
     return [GUARD_EXECUTABLE, "--", ...this.argv(command)];
   }
 
-  private policy(spec: ShellExecSpec): SandboxExecutionPolicy {
-    if (!spec.sandboxPolicy) {
-      throw new Error("git-bash: resolved execution is missing sandbox policy");
-    }
-    return spec.sandboxPolicy;
+  private get hostShell(): HostShell {
+    const configured = (this.gitBashConfig as Config).hostShell;
+    return configured === "bash" ? "bash" : "pwsh";
+  }
+
+  // Host-level callers carry no sandbox policy, so they bypass the sandbox
+  // seam entirely. Windows host plugins were written against PowerShell;
+  // `hostShell: "bash"` keeps them on Git Bash instead.
+  private executeHostLevel(spec: ShellExecSpec): Promise<ShellExecution> {
+    const argv = this.hostShell === "pwsh"
+      ? [
+          resolvePowerShell(),
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          spec.command,
+        ]
+      : this.argv(spec.command);
+    return Promise.resolve(this.executeArgv(spec, argv));
   }
 
   private async confine(
@@ -253,7 +320,8 @@ export class GitBashExecutor extends LocalBashExecutor {
 
   override async execute(spec: ShellExecSpec): Promise<ShellExecution> {
     assertServiceableBashConfig(this.gitBashConfig);
-    const policy = this.policy(spec);
+    const policy = spec.sandboxPolicy;
+    if (policy === undefined) return this.executeHostLevel(spec);
     const { mode } = policy;
     if (mode === "danger-full-access") {
       return GitBashExecutor.decorateResult(
