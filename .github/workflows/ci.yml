@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows (native build + tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds the native guard from source with MSVC + CMake, then compiles
+      # TypeScript and runs the full suite (ACL permission matrix, fail-closed,
+      # Web client, package metadata).
+      - name: Build and test
+        run: pnpm test
+
+      - name: Check publish contents
+        run: npm pack --dry-run
