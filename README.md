@@ -14,11 +14,21 @@
 相对上游 `dsh-plugin-git-bash`（最后发布 0.3.3）与本延续版的第一批改动：
 
 - **包名**：改为 `@dr1n0/dsh-git-bash`，避免与 npm 上的原版同名冲突。
+- **版本号**：采用 `<DSH 版本线>-r<插件修订>`，如 `0.2.2-r1` 表示适配 DSH 0.2.2 系列的第一个插件版本。
 - **DSH 0.2.x 适配**：跟随 `execute` seam、Config schema 投影和新的 client 模块注入（来自 ahtsiu 的分支）。
 - **UTF-8 输出**：为 Git Bash 固定 `LANG`/`LC_ALL`/`PYTHONUTF8`/`PYTHONIOENCODING`，避免中文（CJK）输出在 GBK 代码页机器上变成乱码或触发 `UnicodeEncodeError`。
 - **MSYS 路径转换**：模型或宿主传入的 `/d/work`、`/cygdrive/d/work` 会转成 `D:\work` 再交给 Node 作为工作目录；`/usr/bin` 这类非盘符路径保持原样。
 - **host-level 调用分流**：不带 `sandboxPolicy` 的 `ctx.shell` 调用（宿主插件内部调用）不再继承部署沙箱门禁，默认用 Windows PowerShell 执行；可通过 `hostShell: bash` 改回 Git Bash。
 - **发布脚本**：`prepack` 只做 TypeScript 编译，不强制重建 native（预编译产物随包分发）。
+
+## 版本号约定
+
+版本号形如 `0.2.2-r1`：
+
+- `0.2.2`：适配的 DSH 版本线（peer 范围 `>=0.2.2-rc.1 <0.2.3-0`）；
+- `-r1`：本插件的第 N 个修订。同一条 DSH 线上的插件补丁递增 `-r2`、`-r3`，不会与 DSH 未来的版本号撞车。
+
+安装时以 `package.json` 的 `peerDependencies` 与 `engines` 为准；版本号只是让人一眼看出适配线，不参与兼容判定。
 
 ## 使用方法
 
@@ -41,7 +51,7 @@ Web 界面中的 Bash 工具行可以展开查看 command、cwd、stdout/stderr 
 从 npm 安装固定版本到 Web profile：
 
 ```sh
-dsh plugin --profile web add @dr1n0/dsh-git-bash@0.7.0
+dsh plugin --profile web add @dr1n0/dsh-git-bash@0.2.2-r1
 ```
 
 更新现有安装时使用同一条命令。安装完成后重启 `dsh web`，让 Host 和浏览器 client 同时加载新版本，然后新建会话。
@@ -49,7 +59,7 @@ dsh plugin --profile web add @dr1n0/dsh-git-bash@0.7.0
 开发本地版本时传入 checkout 路径：
 
 ```powershell
-dsh plugin --profile web add E:\Coding\dsh-git-bash-fork
+dsh plugin --profile web add E:\Coding\dsh-git-bash
 ```
 
 ## 权限模式
@@ -113,7 +123,7 @@ dsh web
 
 - Windows x64
 - Node.js 24 或更高版本
-- DSH 0.2.1 系列（`0.2.1-rc.2` 及以上；`0.2.2` 起需要新的插件版本）
+- DSH 0.2.2 系列（`0.2.2-rc.1` 及以上，`<0.2.3`；0.2.3 起需要新的插件版本）
 - Git for Windows x64
 
 npm 包包含预编译的 `msys-token-guard.exe` 和 `msys-token-guard-hook.dll`，普通安装不需要 Visual Studio 或 CMake。当前 native guard 仅支持 `win32-x64`；其他架构在受限模式下返回 `SANDBOX_UNAVAILABLE`，不会降级到未隔离执行。
@@ -124,7 +134,7 @@ Microsoft Detours 4.0.1 源码按 MIT 许可存放在 `native/vendor/detours`，
 
 ### 受限模式在 Git for Windows 2.52 / bash 5.2 上启动失败
 
-在本次验证环境（Windows 11、Git for Windows 2.52.0、bash 5.2.37、DSH 0.2.1-rc.5 依赖线）下，`read-only` / `workspace-write` 的受限执行会让 bash 在初始化阶段直接退出：
+在本次验证环境（Windows 11、Git for Windows 2.52.0、bash 5.2.37、DSH 0.2.2-rc.1 依赖线）下，`read-only` / `workspace-write` 的受限执行会让 bash 在初始化阶段直接退出：
 
 ```text
 cygheap_user::init: NtSetInformationToken (TokenDefaultDacl), 0xC0000022
@@ -133,7 +143,7 @@ fatal error - couldn't create signal pipe, Win32 error 5
 
 即 MSYS 运行时试图重写自己的 token default DACL 时被 ACL 沙箱拒绝，而 native guard 的 hook 在该 Git 版本上未能拦截这次重写。`danger-full-access` 不受影响。
 
-同一环境下用 ahtsiu 的原始分支跑同一套测试，失败用例更多（10 个），因此这不是 0.7.0 改动引入的回归，而是 native guard 与较新 MSYS 版本的兼容性问题。补救方向是针对该 Git 版本更新 `native/msys-token-guard-hook.cpp` 的 hook 条件并以 MSVC 重建 artifact；在修复前请把会话权限设为 `danger-full-access` 使用 Git Bash。
+同一环境下用 ahtsiu 的原始分支跑同一套测试，失败用例更多（10 个），因此这不是本项目改动引入的回归，而是 native guard 与较新 MSYS 版本的兼容性问题。补救方向是针对该 Git 版本更新 `native/msys-token-guard-hook.cpp` 的 hook 条件并以 MSVC 重建 artifact；在修复前请把会话权限设为 `danger-full-access` 使用 Git Bash。
 
 ## 开发
 
