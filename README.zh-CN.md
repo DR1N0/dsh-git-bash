@@ -53,7 +53,7 @@ Web 界面中的 Bash 工具行可以展开查看 command、cwd、stdout/stderr 
 从 npm 安装固定版本到 Web profile：
 
 ```sh
-dsh plugin --profile web add @dr1n0/dsh-git-bash@0.2.2-r2
+dsh plugin --profile web add @dr1n0/dsh-git-bash@0.2.2-r3
 ```
 
 更新现有安装时使用同一条命令。安装完成后重启 `dsh web`，让 Host 和浏览器 client 同时加载新版本，然后新建会话。
@@ -153,7 +153,7 @@ Microsoft Detours 4.0.1 源码按 MIT 许可存放在 `native/vendor/detours`，
 
 ## 验证与兼容性
 
-本版本的验证环境：Windows 11、Git for Windows 2.56.0（UCRT64 运行时、bash 5.3.15）、DSH 0.2.2-rc.1。`pnpm test` 的 36 个用例全部通过，包括 `read-only` / `workspace-write` 的真实 ACL 权限矩阵和 native guard 的 fail-closed 用例。
+本版本的验证环境：Windows 11、Git for Windows 2.56.0（UCRT64 运行时、bash 5.3.15）、DSH 0.2.2-rc.3。`pnpm test` 的 36 个用例全部通过，包括 `read-only` / `workspace-write` 的真实 ACL 权限矩阵和 native guard 的 fail-closed 用例。
 
 Git for Windows 2.52（MINGW64、bash 5.2）上受限模式会失败：
 

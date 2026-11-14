@@ -83,7 +83,7 @@ the DSH installation directory.
 Install a pinned version from npm into the Web profile:
 
 ```sh
-dsh plugin --profile web add @dr1n0/dsh-git-bash@0.2.2-r2
+dsh plugin --profile web add @dr1n0/dsh-git-bash@0.2.2-r3
 ```
 
 Use the same command to update. Restart `dsh web` afterwards so the Host and
@@ -209,7 +209,7 @@ otherwise the guard fails closed.
 ## Verification and compatibility
 
 Validated on Windows 11, Git for Windows 2.56.0 (UCRT64 runtime, bash 5.3.15),
-DSH 0.2.2-rc.1. All 36 `pnpm test` cases pass, including the real ACL
+DSH 0.2.2-rc.3. All 36 `pnpm test` cases pass, including the real ACL
 permission matrix for `read-only` / `workspace-write` and the native guard's
 fail-closed cases.
 
